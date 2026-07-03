@@ -19,7 +19,8 @@ class ReasonCode(str, Enum):
     CORRUPT_IMAGE = "CORRUPT_IMAGE"
     RESOLUTION_TOO_LOW = "RESOLUTION_TOO_LOW"
     EXPLICIT_CONTENT_DETECTED = "EXPLICIT_CONTENT_DETECTED"
-
+    MIRROR_SELFIE_DETECTED = "MIRROR_SELFIE_DETECTED"
+    SIDE_PROFILE_FULL_BODY = "SIDE_PROFILE_FULL_BODY"
 class VerificationError(Exception):
     def __init__(self, code: str, message: str):
         self.code = code

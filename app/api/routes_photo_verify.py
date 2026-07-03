@@ -10,7 +10,6 @@ from app.verification.identity_checks import verify_identity_consistency, get_fa
 from app.workers.pool import get_pool
 from app.config import settings
 from app.utils.errors import VerificationError, ReasonCode
-from app.services.redis_cache import get_redis_cache
 from app.utils.image_io import validate_and_decode_image
 import structlog
 
@@ -22,8 +21,7 @@ ALLOWED_POSITIONS = {"full_body", "front", "left", "right", "back"}
 @router.post("/check-single", response_model=VerificationResult)
 async def check_single(
     file: UploadFile = File(...),
-    position: str = Form(...),
-    session_id: Optional[str] = Form(None)
+    position: str = Form(...)
 ):
     if position not in ALLOWED_POSITIONS:
         raise HTTPException(status_code=422, detail=f"Invalid position. Must be one of {ALLOWED_POSITIONS}")
@@ -41,33 +39,6 @@ async def check_single(
             timeout=settings.batch_timeout_seconds
         )
         
-        # Real-Time Identity Check
-        redis_cache = get_redis_cache()
-        if session_id and result.passed and position in ["front", "left", "right", "full_body"] and redis_cache.connected:
-            def extract_embedding(img_bytes, ct):
-                img = validate_and_decode_image(img_bytes, ct)
-                return get_face_embedding(img)
-            
-            emb = await loop.run_in_executor(pool, extract_embedding, file_bytes, content_type)
-            if emb is not None:
-                cached_embs = await redis_cache.get_embeddings(session_id)
-                mismatch = False
-                for cached_pos, cached_emb in cached_embs.items():
-                    dist = float(compute_cosine_distance(emb, cached_emb))
-                    if dist > 0.6:
-                        mismatch = True
-                        break
-                
-                if mismatch:
-                    result.passed = False
-                    from app.schemas.responses import PrimaryReason
-                    result.primary_reason = PrimaryReason(
-                        code=ReasonCode.IDENTITY_MISMATCH_ACROSS_PHOTOS.value,
-                        message="The face in this photo doesn't match a previously uploaded photo in this session."
-                    )
-                else:
-                    await redis_cache.save_embedding(session_id, position, emb)
-
         return result
     except VerificationError as e:
         raise HTTPException(status_code=422, detail={"msg": e.message, "type": "value_error", "loc": ["body", "file"]})

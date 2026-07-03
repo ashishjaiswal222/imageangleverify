@@ -1,3 +1,9 @@
+import os
+
+# Suppress MediaPipe's C++ clearcut telemetry and general TF logging spam
+os.environ["GLOG_minloglevel"] = "2"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 from fastapi import FastAPI, APIRouter
 from app.api.routes_photo_verify import router as photo_verify_router
 from app.workers.pool import get_pool, shutdown_pool
@@ -50,8 +56,6 @@ app = FastAPI(
 async def on_startup():
     logger.info("Starting up API...")
     get_pool() # Initialize pool
-    from app.services.redis_cache import get_redis_cache
-    await get_redis_cache().connect()
     # Start warmup in background to not block uvicorn bind
     asyncio.create_task(warmup_pool())
 
@@ -59,8 +63,6 @@ async def on_startup():
 async def on_shutdown():
     logger.info("Shutting down API...")
     shutdown_pool()
-    from app.services.redis_cache import get_redis_cache
-    await get_redis_cache().disconnect()
 
 app.include_router(api_router)
 

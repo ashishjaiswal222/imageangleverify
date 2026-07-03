@@ -16,7 +16,7 @@ YAW_TURN_MIN = 25.0
 YAW_TURN_MAX = 90.0
 
 # --- Blur Detection ---
-LAPLACIAN_VAR_THRESHOLD = 45.0 # Configurable, images below this are considered blurry
+LAPLACIAN_VAR_THRESHOLD = 10.0 # Extremely permissive to allow smooth AI images to pass, while catching heavy camera blur
 
 # --- Lighting Detection ---
 MIN_BRIGHTNESS = 40.0
