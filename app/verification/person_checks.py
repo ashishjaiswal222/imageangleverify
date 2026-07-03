@@ -45,12 +45,20 @@ def check_person_and_face(image: mp.Image, position: str) -> Tuple[bool, Optiona
         return False, float(face_count), ReasonCode.GROUP_PHOTO_DETECTED, "Multiple faces detected. Please upload a solo photo."
         
     if face_count == 1:
-        # --- CARTOON/ART FILTER ---
         # Real human faces map to a tight embedding manifold (norm 13.0 - 18.5)
         # Highly stylized anime/cartoons stretch this manifold (norm > 20.0)
         face_norm = np.linalg.norm(valid_faces[0].embedding)
         if face_norm > MAX_FACE_EMBEDDING_NORM:
-            return False, float(face_norm), ReasonCode.CARTOON_OR_ART_DETECTED, "The detected face appears to be a cartoon, avatar, or highly stylized art. Please upload a real human photograph."
+            # Check face size. Distant faces (like in full body) often have high norms due to low resolution.
+            # Dogs, cats, and non-human objects also produce high norms.
+            f_bbox = valid_faces[0].bbox
+            f_width = f_bbox[2] - f_bbox[0]
+            
+            # If the face is small and we are expecting a full body, it is a real human just far away.
+            if f_width < 120 and position == "full_body":
+                pass # Skip the cartoon filter
+            else:
+                return False, float(face_norm), ReasonCode.CARTOON_OR_ART_DETECTED, "The detected face appears to be a cartoon, non-human object (like a pet), or is too blurry for verification. Please upload a clear, high-resolution photograph of a real human."
         
     if face_count == 0:
         if position in ["front", "left", "right", "full_body"]:

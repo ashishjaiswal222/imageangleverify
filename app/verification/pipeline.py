@@ -70,8 +70,11 @@ def verify_image(file_bytes: bytes, content_type: str, position: str) -> Verific
                 passed, score, code, msg = check_eyewear(mp_image, image_np)
                 record_check("eyewear", passed, score, code, msg)
 
-                # 8. Eyes Open
-                passed, score, code, msg = check_eyes_open(mp_image, image_np)
+                # 8. Eyes Open (Bypass for full_body because distant eyes cannot be reliably measured)
+                if position == "full_body":
+                    passed, score, code, msg = True, None, None, None
+                else:
+                    passed, score, code, msg = check_eyes_open(mp_image, image_np)
                 record_check("eyes_open", passed, score, code, msg)
 
                 # 9. Face Coverage

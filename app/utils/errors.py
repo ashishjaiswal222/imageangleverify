@@ -28,4 +28,3 @@ class VerificationError(Exception):
         self.code = code
         self.message = message
         super().__init__(code, message)
-
