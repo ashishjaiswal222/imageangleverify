@@ -1,0 +1,64 @@
+import cv2
+import numpy as np
+import mediapipe as mp
+from typing import Tuple, Optional
+from app.utils.errors import ReasonCode
+from app.verification.constants import (
+    LAPLACIAN_VAR_THRESHOLD, MIN_BRIGHTNESS, MAX_BRIGHTNESS, FACE_CENTER_TOLERANCE_PCT
+)
+from app.verification.models_loader import get_models
+
+def check_blur(image_np: np.ndarray) -> Tuple[bool, float, Optional[str], Optional[str]]:
+    """Checks if the image is too blurry using Laplacian variance."""
+    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+    variance = cv2.Laplacian(gray, cv2.CV_64F).var()
+    
+    if variance < LAPLACIAN_VAR_THRESHOLD:
+        return False, float(variance), ReasonCode.IMAGE_BLURRY, "Photo appears blurry or low resolution. Please retake in good, steady light."
+    return True, float(variance), None, None
+
+def check_lighting(image_np: np.ndarray) -> Tuple[bool, float, Optional[str], Optional[str]]:
+    """Checks if the image is under-exposed or over-exposed."""
+    # Convert to HSV and use V channel for brightness
+    hsv = cv2.cvtColor(image_np, cv2.COLOR_RGB2HSV)
+    v_channel = hsv[:, :, 2]
+    mean_brightness = np.mean(v_channel)
+    
+    if mean_brightness < MIN_BRIGHTNESS:
+        return False, float(mean_brightness), ReasonCode.POOR_LIGHTING, "Photo is too dark. Please move to a better lit area."
+    elif mean_brightness > MAX_BRIGHTNESS:
+        return False, float(mean_brightness), ReasonCode.POOR_LIGHTING, "Photo is too bright or washed out. Please avoid standing directly in front of strong light sources."
+        
+    return True, float(mean_brightness), None, None
+
+def check_face_centering(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Optional[float], Optional[str], Optional[str]]:
+    """Checks if the detected face is reasonably centered in the frame."""
+    models = get_models()
+    result = models.face_detector.detect(image)
+    
+    if not result.detections:
+        return True, None, None, None # Handled by person_checks
+        
+    bbox = result.detections[0].bounding_box
+    
+    # Bounding box coordinates from mediapipe are absolute in pixels
+    # Wait, MediaPipe FaceDetector returns absolute or relative? 
+    # Usually relative in normalized coordinates [0, 1] for FaceDetector, wait, let's check.
+    # Ah, `mp.tasks.components.containers.BoundingBox` has `origin_x`, `origin_y`, `width`, `height` in pixels.
+    
+    img_height, img_width = image_np.shape[:2]
+    center_x = bbox.origin_x + (bbox.width / 2)
+    center_y = bbox.origin_y + (bbox.height / 2)
+    
+    norm_cx = center_x / img_width
+    norm_cy = center_y / img_height
+    
+    # Perfect center is (0.5, 0.5)
+    dist_x = abs(0.5 - norm_cx)
+    dist_y = abs(0.5 - norm_cy)
+    
+    # We allow FACE_CENTER_TOLERANCE_PCT deviation
+    if dist_x > FACE_CENTER_TOLERANCE_PCT or dist_y > FACE_CENTER_TOLERANCE_PCT:
+        return False, float(max(dist_x, dist_y)), ReasonCode.FACE_NOT_CENTERED, "Face is not centered. Please ensure your face is in the middle of the frame."
+        
+    return True, float(max(dist_x, dist_y)), None, None
