@@ -18,6 +18,7 @@ class ReasonCode(str, Enum):
     UNSUPPORTED_FORMAT = "UNSUPPORTED_FORMAT"
     CORRUPT_IMAGE = "CORRUPT_IMAGE"
     RESOLUTION_TOO_LOW = "RESOLUTION_TOO_LOW"
+    EXPLICIT_CONTENT_DETECTED = "EXPLICIT_CONTENT_DETECTED"
 
 class VerificationError(Exception):
     def __init__(self, code: str, message: str):

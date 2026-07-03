@@ -2,6 +2,7 @@ import os
 import mediapipe as mp
 import insightface
 from insightface.app import FaceAnalysis
+from nudenet import NudeDetector
 
 class MediaPipeModels:
     _instance = None
@@ -12,6 +13,7 @@ class MediaPipeModels:
         self.face_landmarker = None
         self.image_segmenter = None
         self.face_analysis = None
+        self.nude_detector = None
         self._load_models()
 
     @classmethod
@@ -62,6 +64,10 @@ class MediaPipeModels:
         # Note: This will download 'buffalo_l' models to ~/.insightface on first run if missing.
         self.face_analysis = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
         self.face_analysis.prepare(ctx_id=0, det_size=(640, 640))
+
+        # 6. Explicit Content (NudeNet)
+        # Note: This downloads the default model (~80MB) to ~/.NudeNet on first run if missing.
+        self.nude_detector = NudeDetector()
 
 def get_models() -> MediaPipeModels:
     return MediaPipeModels.get_instance()

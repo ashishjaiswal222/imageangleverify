@@ -62,3 +62,34 @@ def check_face_centering(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, O
         return False, float(max(dist_x, dist_y)), ReasonCode.FACE_NOT_CENTERED, "Face is not centered. Please ensure your face is in the middle of the frame."
         
     return True, float(max(dist_x, dist_y)), None, None
+
+def check_explicit_content(image_np: np.ndarray) -> Tuple[bool, Optional[float], Optional[str], Optional[str]]:
+    """Checks the image for explicit or NSFW content using NudeNet."""
+    models = get_models()
+    
+    # NudeNet expects an OpenCV BGR image or a path. image_np is RGB.
+    bgr_img = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+    
+    # Run inference
+    detections = models.nude_detector.detect(bgr_img)
+    
+    blocked_classes = {
+        "FEMALE_GENITALIA_EXPOSED", 
+        "MALE_GENITALIA_EXPOSED", 
+        "FEMALE_BREAST_EXPOSED", 
+        "BUTTOCKS_EXPOSED", 
+        "ANUS_EXPOSED"
+        # MALE_BREAST_EXPOSED is explicitly allowed
+    }
+    
+    max_score = 0.0
+    for det in detections:
+        class_name = det.get("class")
+        score = det.get("score")
+        if class_name in blocked_classes and score > 0.45:
+            max_score = max(max_score, score)
+            
+    if max_score > 0.45:
+        return False, float(max_score), ReasonCode.EXPLICIT_CONTENT_DETECTED, "Explicit or inappropriate content detected. Please upload an appropriate photo."
+        
+    return True, 0.0, None, None

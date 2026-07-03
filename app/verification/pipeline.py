@@ -6,7 +6,7 @@ from app.utils.image_io import validate_and_decode_image
 from app.schemas.responses import VerificationResult, CheckResult, PrimaryReason
 from app.verification.person_checks import check_person_and_face
 from app.verification.angle_detector import check_head_pose
-from app.verification.quality_checks import check_blur, check_lighting, check_face_centering
+from app.verification.quality_checks import check_blur, check_lighting, check_face_centering, check_explicit_content
 from app.verification.occlusion_checks import check_eyes_open, check_eyewear, check_face_coverage
 from app.verification.edit_detector import check_heavy_editing
 from app.utils.errors import VerificationError, ReasonCode
@@ -40,7 +40,14 @@ def verify_image(file_bytes: bytes, content_type: str, position: str) -> Verific
         passed, score, code, msg = check_person_and_face(mp_image, position)
         record_check("person_and_face", passed, score, code, msg)
         
-        if passed or position == "back": # If back, face might not be detected but we continue to check pose
+        # 2.5 Explicit Content Check
+        passed, score, code, msg = check_explicit_content(image_np)
+        record_check("explicit_content", passed, score, code, msg)
+
+        # Stop early if explicit
+        if not passed:
+            overall_passed = False
+        elif checks["person_and_face"].passed or position == "back": # If back, face might not be detected but we continue to check pose
             # 3. Angle Check
             if position != "full_body":
                 passed, score, code, msg, detected, expected = check_head_pose(mp_image, position)

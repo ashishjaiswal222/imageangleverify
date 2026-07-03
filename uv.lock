@@ -651,6 +651,20 @@ wheels = [
 ]
 
 [[package]]
+name = "nudenet"
+version = "3.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "onnxruntime" },
+    { name = "opencv-python-headless" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/04/8f/9e4862f004f648d240039ebffda2441d230741c164efaa25038051b56c60/nudenet-3.4.2.tar.gz", hash = "sha256:b20645d5f06bbb10006e6d4dc8a9513cf684269bbcffb0557a3ed6831aa90d75", size = 10596676, upload-time = "2024-07-03T17:32:05.792Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/ee/1aa02d44ba958cc77e16ff1e41a0aac5e721037db7bf62b9c9d124917f87/nudenet-3.4.2-py3-none-any.whl", hash = "sha256:5937dbd84e5d8e5de038f08ffea5a1bb50a08475776bf2b4795914ce0eaf0331", size = 10595223, upload-time = "2024-07-03T17:32:02.78Z" },
+]
+
+[[package]]
 name = "numpy"
 version = "2.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -831,6 +845,7 @@ dependencies = [
     { name = "httpx" },
     { name = "insightface" },
     { name = "mediapipe" },
+    { name = "nudenet" },
     { name = "numpy" },
     { name = "onnxruntime" },
     { name = "opencv-python-headless" },
@@ -851,6 +866,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "insightface", specifier = ">=1.0.1" },
     { name = "mediapipe", specifier = ">=0.10.35" },
+    { name = "nudenet", specifier = ">=3.4.2" },
     { name = "numpy", specifier = ">=2.5.0" },
     { name = "onnxruntime", specifier = ">=1.27.0" },
     { name = "opencv-python-headless", specifier = ">=4.13.0.92" },

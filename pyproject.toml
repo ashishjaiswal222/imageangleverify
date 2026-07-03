@@ -9,6 +9,7 @@ dependencies = [
     "httpx>=0.28.1",
     "insightface>=1.0.1",
     "mediapipe>=0.10.35",
+    "nudenet>=3.4.2",
     "numpy>=2.5.0",
     "onnxruntime>=1.27.0",
     "opencv-python-headless>=4.13.0.92",
