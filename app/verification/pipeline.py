@@ -61,7 +61,7 @@ def verify_image(file_bytes: bytes, content_type: str, position: str) -> Verific
             passed, score, code, msg = check_lighting(image_np)
             record_check("lighting", passed, score, code, msg)
 
-            if position in ["front", "left", "right"]:
+            if position in ["front", "left", "right", "full_body"]:
                 # 6. Face Centering
                 passed, score, code, msg = check_face_centering(mp_image, image_np)
                 record_check("face_centered", passed, score, code, msg)
@@ -71,7 +71,7 @@ def verify_image(file_bytes: bytes, content_type: str, position: str) -> Verific
                 record_check("eyewear", passed, score, code, msg)
 
                 # 8. Eyes Open
-                passed, score, code, msg = check_eyes_open(mp_image)
+                passed, score, code, msg = check_eyes_open(mp_image, image_np)
                 record_check("eyes_open", passed, score, code, msg)
 
                 # 9. Face Coverage

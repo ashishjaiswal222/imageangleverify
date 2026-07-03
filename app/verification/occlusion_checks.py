@@ -28,15 +28,73 @@ def _get_ear(landmarks, eye_indices):
         return 0.0
     return vertical_dist / horizontal_dist
 
-def check_eyes_open(image: mp.Image) -> Tuple[bool, Optional[float], Optional[str], Optional[str]]:
-    """Uses Eye Aspect Ratio (EAR) to determine if eyes are open."""
+class _DummyLandmark:
+    def __init__(self, x, y, z=0.0):
+        self.x = x
+        self.y = y
+        self.z = z
+
+def _get_robust_landmarks(image_np: np.ndarray, mp_image: mp.Image):
+    """
+    Attempts to get Face Landmarks. If MediaPipe fails due to small/distant faces,
+    uses InsightFace to crop the face and retries MediaPipe on the crop, then
+    translates the landmarks back to the original image coordinates.
+    """
     models = get_models()
-    result = models.face_landmarker.detect(image)
+    result = models.face_landmarker.detect(mp_image)
     
-    if not result.face_landmarks:
-        return True, None, None, None # Handled elsewhere
+    if result.face_landmarks:
+        return result.face_landmarks[0]
         
-    landmarks = result.face_landmarks[0]
+    # Fallback for distant/full_body faces where MediaPipe fails
+    bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+    faces = models.face_analysis.get(bgr)
+    if not faces:
+        return None
+        
+    face = faces[0]
+    h, w, _ = image_np.shape
+    x1, y1, x2, y2 = map(int, face.bbox)
+    
+    # Expand crop slightly
+    margin = int(max(x2-x1, y2-y1) * 0.2)
+    crop_x1 = max(0, x1 - margin)
+    crop_y1 = max(0, y1 - margin)
+    crop_x2 = min(w, x2 + margin)
+    crop_y2 = min(h, y2 + margin)
+    
+    if crop_x2 <= crop_x1 or crop_y2 <= crop_y1:
+        return None
+        
+    crop = np.ascontiguousarray(image_np[crop_y1:crop_y2, crop_x1:crop_x2])
+    if crop.size == 0:
+        return None
+        
+    crop_mp = mp.Image(image_format=mp.ImageFormat.SRGB, data=crop)
+    crop_result = models.face_landmarker.detect(crop_mp)
+    
+    if not crop_result.face_landmarks:
+        return None
+        
+    # Translate normalized crop coordinates back to full image normalized coordinates
+    crop_landmarks = crop_result.face_landmarks[0]
+    translated_landmarks = []
+    crop_w = crop_x2 - crop_x1
+    crop_h = crop_y2 - crop_y1
+    
+    for lm in crop_landmarks:
+        tx = (crop_x1 + (lm.x * crop_w)) / w
+        ty = (crop_y1 + (lm.y * crop_h)) / h
+        translated_landmarks.append(_DummyLandmark(tx, ty, lm.z))
+        
+    return translated_landmarks
+
+def check_eyes_open(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Optional[float], Optional[str], Optional[str]]:
+    """Uses Eye Aspect Ratio (EAR) to determine if eyes are open."""
+    landmarks = _get_robust_landmarks(image_np, image)
+    
+    if not landmarks:
+        return True, None, None, None # Handled elsewhere
     left_ear = _get_ear(landmarks, LEFT_EYE)
     right_ear = _get_ear(landmarks, RIGHT_EYE)
     
@@ -54,13 +112,11 @@ def check_eyewear(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Optional
     Since blendshapes don't explicitly give 'glasses', we'll rely on iris or crop contrast.
     For simplicity and speed, we will use a contrast heuristic on the eye bounding box.
     """
-    models = get_models()
-    result = models.face_landmarker.detect(image)
+    lms = _get_robust_landmarks(image_np, image)
     
-    if not result.face_landmarks:
+    if not lms:
         return True, None, None, None
         
-    lms = result.face_landmarks[0]
     h, w, _ = image_np.shape
     
     # Define an ROI around the eyes
@@ -104,9 +160,9 @@ def check_face_coverage(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Op
     """
     models = get_models()
     seg_result = models.image_segmenter.segment(image)
-    face_result = models.face_landmarker.detect(image)
+    lms = _get_robust_landmarks(image_np, image)
     
-    if not seg_result.category_mask or not face_result.face_landmarks:
+    if not seg_result.category_mask or not lms:
         return True, None, None, None
         
     mask = seg_result.category_mask.numpy_view()
@@ -114,7 +170,6 @@ def check_face_coverage(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Op
     
     # Define hairline zone: above eyebrows (e.g. landmarks 65, 295) 
     # up to the top of the head (landmark 10)
-    lms = face_result.face_landmarks[0]
     
     top_y = max(0, int(lms[10].y * h) - int(0.05 * h)) # Slightly above top landmark
     bottom_y = int(min(lms[65].y, lms[295].y) * h)

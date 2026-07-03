@@ -35,6 +35,8 @@ FACE_CENTER_TOLERANCE_PCT = 0.25 # 25% from center
 
 # --- Pose Landmarker (Full Body) ---
 MIN_POSE_PRESENCE_SCORE = 0.5
+MIN_FACE_DETECTION_SCORE = 0.5 # Reverted to 0.5 to allow real human side-profiles to pass
+MAX_FACE_EMBEDDING_NORM = 20.0 # Adjusted to 20.0 (real humans map < 19.8, anime maps > 20.2)
 REQUIRED_POSE_LANDMARKS = [
     0,  # nose (head approx)
     11, 12, # shoulders

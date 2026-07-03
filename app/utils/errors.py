@@ -21,6 +21,8 @@ class ReasonCode(str, Enum):
     EXPLICIT_CONTENT_DETECTED = "EXPLICIT_CONTENT_DETECTED"
     MIRROR_SELFIE_DETECTED = "MIRROR_SELFIE_DETECTED"
     SIDE_PROFILE_FULL_BODY = "SIDE_PROFILE_FULL_BODY"
+    CARTOON_OR_ART_DETECTED = "CARTOON_OR_ART_DETECTED"
+    
 class VerificationError(Exception):
     def __init__(self, code: str, message: str):
         self.code = code

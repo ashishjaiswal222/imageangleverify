@@ -35,13 +35,17 @@ async def warmup_pool():
     dummy_bytes = encoded.tobytes()
     
     from app.verification.pipeline import verify_image
+    from app.config import settings
     
     try:
-        # Run dummy inference to force model loading
-        await loop.run_in_executor(pool, verify_image, dummy_bytes, "image/jpeg", "front")
+        # Run dummy inference concurrently for all workers to force full pool initialization
+        tasks = []
+        for _ in range(settings.worker_pool_size):
+            tasks.append(loop.run_in_executor(pool, verify_image, dummy_bytes, "image/jpeg", "front"))
+        
+        await asyncio.gather(*tasks, return_exceptions=True)
     except Exception as e:
-        # A VerificationError for NO_FACE_DETECTED is expected here, so we just catch and log
-        logger.debug(f"Warmup inference completed with expected error: {e}")
+        logger.debug(f"Warmup inference completed with error: {e}")
         
     IS_READY = True
     logger.info("Models are loaded. API is ready.")
