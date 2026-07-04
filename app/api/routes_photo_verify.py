@@ -23,8 +23,8 @@ async def check_single(
     file: UploadFile = File(...),
     position: str = Form(...)
 ):
-    if position not in ALLOWED_POSITIONS:
-        raise HTTPException(status_code=422, detail=f"Invalid position. Must be one of {ALLOWED_POSITIONS}")
+    if position not in {"front", "full_body"}:
+        raise HTTPException(status_code=422, detail="Invalid position for single check. Must be 'front' or 'full_body'")
 
     file_bytes = await file.read()
     content_type = file.content_type

@@ -47,7 +47,7 @@ def verify_image(file_bytes: bytes, content_type: str, position: str) -> Verific
         # Stop early if explicit
         if not passed:
             overall_passed = False
-        elif checks["person_and_face"].passed or position == "back": # If back, face might not be detected but we continue to check pose
+        elif checks["person_and_face"].passed or code == ReasonCode.CARTOON_OR_ART_DETECTED or position == "back":
             # 3. Angle Check
             if position != "full_body":
                 passed, score, code, msg, detected, expected = check_head_pose(mp_image, position)
@@ -84,6 +84,14 @@ def verify_image(file_bytes: bytes, content_type: str, position: str) -> Verific
             # 10. Heavy Editing
             passed, score, code, msg = check_heavy_editing(image_np)
             record_check("heavy_editing", passed, score, code, msg)
+
+        # Priority Override: If a face has sunglasses, it often causes a massive anomaly that triggers the Cartoon error.
+        # We must prioritize EYEWEAR_DETECTED and clear the false Cartoon error.
+        if "eyewear" in checks and not checks["eyewear"].passed:
+            if primary_reason and primary_reason.code == ReasonCode.CARTOON_OR_ART_DETECTED.value:
+                primary_reason = PrimaryReason(code=ReasonCode.EYEWEAR_DETECTED.value, message=checks["eyewear"].message)
+                checks["person_and_face"].passed = True
+                checks["person_and_face"].message = None
 
     except VerificationError as e:
         if e.code in [ReasonCode.FILE_TOO_LARGE.value, ReasonCode.UNSUPPORTED_FORMAT.value, ReasonCode.CORRUPT_IMAGE.value, ReasonCode.RESOLUTION_TOO_LOW.value]:

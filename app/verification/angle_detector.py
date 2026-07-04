@@ -41,8 +41,6 @@ def check_head_pose(image: mp.Image, expected_position: str) -> Tuple[bool, Opti
             return _check_back_view(image)
         elif expected_position in ["left", "right"]:
             return _check_side_body_view(image, expected_position)
-        elif expected_position == "front":
-            return _check_front_body_view(image)
         return False, 0.0, ReasonCode.NO_FACE_DETECTED, "No face detected.", None, expected_position
 
     matrix = result.facial_transformation_matrixes[0]
@@ -138,39 +136,4 @@ def _check_side_body_view(image: mp.Image, expected_position: str) -> Tuple[bool
                 
     return False, 0.0, ReasonCode.ANGLE_MISMATCH, f"Could not verify a side profile pose. Please upload a valid {expected_position.title()} View.", "unknown", expected_position
 
-def _check_front_body_view(image: mp.Image) -> Tuple[bool, float, Optional[str], Optional[str], Optional[str], Optional[str]]:
-    """Fallback logic for front view when face landmarks are not detected (e.g., full body front view)."""
-    models = get_models()
-    pose_result = models.pose_landmarker.detect(image)
-    if not pose_result.pose_landmarks:
-        return False, 0.0, ReasonCode.NO_FACE_DETECTED, "No person detected. Please upload a Front View photo.", "unknown", "front"
-        
-    lms = pose_result.pose_landmarks[0]
-    
-    # For a front view, both shoulders should be clearly visible and wide
-    left_shoulder, right_shoulder = lms[11], lms[12]
-    left_ear, right_ear = lms[7], lms[8]
-    
-    if left_shoulder.visibility > 0.5 and right_shoulder.visibility > 0.5:
-        # Check if ear visibility is roughly symmetric (meaning not turned sideways)
-        if left_ear.visibility > 0.3 and right_ear.visibility > 0.3:
-            ear_vis_diff = abs(left_ear.visibility - right_ear.visibility)
-            if ear_vis_diff < 0.3: # Symmetric ears
-                return True, 1.0, None, None, "front", "front"
-                
-        # Fallback to shoulder width vs torso height
-        shoulder_width = abs(left_shoulder.x - right_shoulder.x)
-        left_hip, right_hip = lms[23], lms[24]
-        
-        if left_hip.visibility > 0.5 and right_hip.visibility > 0.5:
-            avg_shoulder_y = (left_shoulder.y + right_shoulder.y) / 2
-            avg_hip_y = (left_hip.y + right_hip.y) / 2
-            torso_height = abs(avg_hip_y - avg_shoulder_y)
-            
-            if torso_height > 0.05:
-                ratio = shoulder_width / torso_height
-                if ratio > 0.5: # Shoulders are wide relative to torso (facing front)
-                    return True, 1.0, None, None, "front", "front"
-                    
-    return False, 0.0, ReasonCode.ANGLE_MISMATCH, "Could not verify a front-facing pose. Please upload a valid Front View.", "unknown", "front"
 

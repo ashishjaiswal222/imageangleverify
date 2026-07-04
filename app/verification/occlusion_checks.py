@@ -141,14 +141,31 @@ def check_eyewear(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Optional
         
     gray_crop = cv2.cvtColor(eye_crop, cv2.COLOR_RGB2GRAY)
     
-    # Sunglasses are typically very dark. 
-    # Check if a large portion of the eye area is extremely dark.
+    # Extract approximate face crop for dynamic contrast
+    face_top = int(lms[10].y * h)
+    face_bot = int(lms[152].y * h)
+    face_left = int(lms[234].x * w)
+    face_right = int(lms[454].x * w)
+    
+    face_crop = image_np[max(0, face_top):min(h, face_bot), max(0, face_left):min(w, face_right)]
+    if face_crop.size == 0:
+        return True, None, None, None
+        
+    face_gray = cv2.cvtColor(face_crop, cv2.COLOR_RGB2GRAY)
+    eye_mean = np.mean(gray_crop)
+    face_mean = np.mean(face_gray)
+    
+    # 1. Absolute Check: Are the eyes pitch black?
     dark_pixels = np.sum(gray_crop < 40)
     total_pixels = gray_crop.shape[0] * gray_crop.shape[1]
     dark_ratio = dark_pixels / total_pixels
     
-    if dark_ratio > 0.4: # If > 40% of eye region is very dark
-        return False, float(dark_ratio), ReasonCode.EYEWEAR_DETECTED, "Please remove sunglasses/eyeglasses and retake the photo."
+    # 2. Dynamic Contrast: Are the eyes drastically darker than the face?
+    contrast_ratio = eye_mean / (face_mean + 1e-6)
+    
+    # If the eye area is overwhelmingly pitch black OR the eyes are drastically darker than the skin
+    if dark_ratio > 0.40 or contrast_ratio < 0.60:
+        return False, float(max(dark_ratio, 1.0 - contrast_ratio)), ReasonCode.EYEWEAR_DETECTED, "Please remove sunglasses/eyeglasses and retake the photo."
         
     return True, float(dark_ratio), None, None
 

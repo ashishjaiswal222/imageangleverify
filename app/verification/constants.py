@@ -19,7 +19,7 @@ YAW_TURN_MAX = 90.0
 LAPLACIAN_VAR_THRESHOLD = 10.0 # Extremely permissive to allow smooth AI images to pass, while catching heavy camera blur
 
 # --- Lighting Detection ---
-MIN_BRIGHTNESS = 40.0
+MIN_BRIGHTNESS = 80.0
 MAX_BRIGHTNESS = 230.0
 
 # --- Eye/Occlusion Checks ---
@@ -36,7 +36,7 @@ FACE_CENTER_TOLERANCE_PCT = 0.25 # 25% from center
 # --- Pose Landmarker (Full Body) ---
 MIN_POSE_PRESENCE_SCORE = 0.5
 MIN_FACE_DETECTION_SCORE = 0.5 # Reverted to 0.5 to allow real human side-profiles to pass
-MAX_FACE_EMBEDDING_NORM = 20.0 # Adjusted to 20.0 (real humans map < 19.8, anime maps > 20.2)
+MAX_FACE_EMBEDDING_NORM = 26.0 # Drastically increased to 26.0 so we don't falsely reject highly stylized real humans
 REQUIRED_POSE_LANDMARKS = [
     0,  # nose (head approx)
     11, 12, # shoulders
