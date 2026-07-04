@@ -25,8 +25,7 @@ class IdentityConsistency(BaseModel):
     passed: bool
     face_similarity_pairs: Dict[str, float]
     clothing_consistency_score: float
-    reason_code: Optional[str] = None
-    message: Optional[str] = None
+    failed_reasons: List[PrimaryReason] = Field(default_factory=list, description="List of reasons identity consistency failed")
 
 class BatchResults(BaseModel):
     session_id: Optional[str] = None

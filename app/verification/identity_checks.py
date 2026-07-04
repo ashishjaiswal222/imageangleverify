@@ -3,7 +3,7 @@ import numpy as np
 import mediapipe as mp
 from typing import Dict, Any, Tuple
 from app.verification.models_loader import get_models
-from app.schemas.responses import VerificationResult
+from app.schemas.responses import VerificationResult, PrimaryReason
 from pydantic import BaseModel
 import structlog
 
@@ -13,8 +13,7 @@ class IdentityConsistency(BaseModel):
     passed: bool
     face_similarity_pairs: Dict[str, float]
     clothing_consistency_score: float
-    reason_code: str | None = None
-    message: str | None = None
+    failed_reasons: list[PrimaryReason] = []
 
 def compute_cosine_distance(emb1: np.ndarray, emb2: np.ndarray) -> float:
     return 1 - np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
@@ -50,7 +49,16 @@ def get_clothing_histogram(image_np: np.ndarray) -> np.ndarray | None:
     cv2.normalize(hist, hist, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
     return hist
 
-def verify_identity_consistency(images_by_pos: Dict[str, np.ndarray]) -> IdentityConsistency:
+def verify_identity_consistency(images_by_pos_bytes: Dict[str, Tuple[bytes, str]]) -> IdentityConsistency:
+    # Decode images inside the worker to prevent IPC memory bloat
+    from app.utils.image_io import validate_and_decode_image
+    images_by_pos = {}
+    for pos, (file_bytes, content_type) in images_by_pos_bytes.items():
+        try:
+            images_by_pos[pos] = validate_and_decode_image(file_bytes, content_type)
+        except Exception as e:
+            logger.error(f"Failed to decode image {pos} for identity check: {e}")
+            
     # 1. Face Embeddings (Insightface)
     # Cosine distance threshold for InsightFace ArcFace is usually around 0.6. 
     # Smaller distance = more similar.
@@ -65,8 +73,7 @@ def verify_identity_consistency(images_by_pos: Dict[str, np.ndarray]) -> Identit
                 
     face_similarity_pairs = {}
     passed = True
-    reason_code = None
-    message = None
+    failed_reasons = []
     
     # Compare all pairs of embeddings
     keys = list(embeddings.keys())
@@ -78,8 +85,8 @@ def verify_identity_consistency(images_by_pos: Dict[str, np.ndarray]) -> Identit
             face_similarity_pairs[pair_key] = round(dist, 4)
             if dist > COSINE_DIST_THRESHOLD:
                 passed = False
-                reason_code = "IDENTITY_MISMATCH_ACROSS_PHOTOS"
                 message = f"The face in your {k1.replace('_', ' ').title()} photo doesn't match your {k2.replace('_', ' ').title()} photo. Please make sure all photos are of the same person."
+                failed_reasons.append(PrimaryReason(code="IDENTITY_MISMATCH", message=message))
 
     # 2. Clothing Consistency for 'back'
     clothing_consistency_score = 1.0 # Default if we can't compare
@@ -104,6 +111,5 @@ def verify_identity_consistency(images_by_pos: Dict[str, np.ndarray]) -> Identit
         passed=passed,
         face_similarity_pairs=face_similarity_pairs,
         clothing_consistency_score=clothing_consistency_score,
-        reason_code=reason_code,
-        message=message
+        failed_reasons=failed_reasons
     )

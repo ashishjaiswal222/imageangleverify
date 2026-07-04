@@ -118,11 +118,11 @@ def check_neutral_expression(image: mp.Image, image_np: np.ndarray) -> Tuple[boo
     smile_right = bs_dict.get('mouthSmileRight', 0.0)
     
     # 1. Check for yawning/shouting (Mouth wide open)
-    if jaw_open > 0.3:
+    if jaw_open > 0.5:
         return False, float(jaw_open), ReasonCode.EXPRESSION_NOT_NEUTRAL, "Mouth is open. Please keep a neutral expression with your mouth closed."
         
     # 2. Check for big smiles
-    if smile_left > 0.5 or smile_right > 0.5:
+    if smile_left > 0.75 or smile_right > 0.75:
         smile_score = max(smile_left, smile_right)
         return False, float(smile_score), ReasonCode.EXPRESSION_NOT_NEUTRAL, "Exaggerated smile detected. Please keep a neutral expression."
         

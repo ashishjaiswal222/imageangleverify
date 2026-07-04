@@ -25,7 +25,9 @@ class ReasonCode(str, Enum):
     BACKGROUND_CLUTTERED = "BACKGROUND_CLUTTERED"
     EXPRESSION_NOT_NEUTRAL = "EXPRESSION_NOT_NEUTRAL"
     CAMERA_NOT_EYE_LEVEL = "CAMERA_NOT_EYE_LEVEL"
-    
+    UNEVEN_LIGHTING = "UNEVEN_LIGHTING"
+    IDENTITY_MISMATCH = "IDENTITY_MISMATCH"
+
 class VerificationError(Exception):
     def __init__(self, code: str, message: str):
         self.code = code

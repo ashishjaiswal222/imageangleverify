@@ -68,6 +68,12 @@ def verify_image(file_bytes: bytes, content_type: str, position: str) -> Verific
                 passed, score, code, msg = check_lighting(image_np)
                 record_check("lighting", passed, score, code, msg)
 
+                # 5.5 Uneven Lighting
+                from app.verification.quality_checks import check_uneven_lighting
+                passed, score, code, msg = check_uneven_lighting(mp_image, image_np)
+                record_check("uneven_lighting", passed, score, code, msg)
+
+
                 if position in ["front", "left", "right", "full_body"]:
                     # 6. Face Centering
                     passed, score, code, msg = check_face_centering(mp_image, image_np)

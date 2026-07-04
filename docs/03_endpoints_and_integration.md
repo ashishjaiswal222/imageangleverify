@@ -55,12 +55,16 @@ Use this endpoint the moment a user drops a single photo into an upload box on t
 Use this endpoint when the user hits the final "Submit" button. It processes all required photos in parallel and performs the **Identity Consistency** check.
 
 **Request Payload (multipart/form-data)**
-- `front`: Raw binary image file.
-- `left`: Raw binary image file.
-- `right`: Raw binary image file.
-- `back`: Raw binary image file.
-- `full_body`: Raw binary image file.
+- `front`: Raw binary image file (Required).
+- `left`: Raw binary image file (Required).
+- `right`: Raw binary image file (Required).
+- `back`: Raw binary image file (Required).
+- `full_body`: Raw binary image file (Required).
 - `session_id`: Unique string.
+
+*Note: The API strictly enforces that all 5 photos must be uploaded. If any are missing, it will immediately reject the request with a `400 Bad Request`.*
+
+**Performance Note**: Processing all 5 images concurrently takes about 30-60 seconds on standard CPU hardware. Ensure your client's HTTP request timeout is configured to handle this (or run the service on a GPU to reduce latency to < 3 seconds).
 
 **Response**
 The response contains an `overall_passed` boolean, the results for all 5 individual photos, and the massive `identity_consistency` block which mathematically proves if the person in the photos is the same.

@@ -31,6 +31,53 @@ def check_lighting(image_np: np.ndarray) -> Tuple[bool, float, Optional[str], Op
         
     return True, float(mean_brightness), None, None
 
+def check_uneven_lighting(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Optional[float], Optional[str], Optional[str]]:
+    """Checks for harsh shadows/uneven lighting across the face by comparing left vs right cheek."""
+    models = get_models()
+    result = models.face_landmarker.detect(image)
+    if not result.face_landmarks:
+        return True, None, None, None
+        
+    lms = result.face_landmarks[0]
+    h, w, _ = image_np.shape
+    
+    # Left cheek roughly around landmark 50
+    # Right cheek roughly around landmark 280
+    left_cheek_x = int(lms[50].x * w)
+    left_cheek_y = int(lms[50].y * h)
+    
+    right_cheek_x = int(lms[280].x * w)
+    right_cheek_y = int(lms[280].y * h)
+    
+    patch_size = int(max(w, h) * 0.02) # 2% of image size for patch
+    if patch_size < 5: patch_size = 5
+    
+    def get_patch_brightness(cx, cy):
+        x1, y1 = max(0, cx - patch_size), max(0, cy - patch_size)
+        x2, y2 = min(w, cx + patch_size), min(h, cy + patch_size)
+        patch = image_np[y1:y2, x1:x2]
+        if patch.size == 0:
+            return None
+        gray = cv2.cvtColor(patch, cv2.COLOR_RGB2GRAY)
+        return np.mean(gray)
+        
+    left_b = get_patch_brightness(left_cheek_x, left_cheek_y)
+    right_b = get_patch_brightness(right_cheek_x, right_cheek_y)
+    
+    if left_b is None or right_b is None:
+        return True, None, None, None
+        
+    max_b = max(left_b, right_b) + 1
+    min_b = min(left_b, right_b) + 1
+    
+    ratio = min_b / max_b
+    
+    # If one cheek is drastically darker (less than 40% brightness of the other)
+    if ratio < 0.40:
+        return False, float(ratio), ReasonCode.UNEVEN_LIGHTING, "Harsh shadows detected on the face. Please stand in even, natural lighting."
+        
+    return True, float(ratio), None, None
+
 def check_face_centering(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Optional[float], Optional[str], Optional[str]]:
     """Checks if the detected face is reasonably centered in the frame."""
     models = get_models()

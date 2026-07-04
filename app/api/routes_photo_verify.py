@@ -59,6 +59,11 @@ async def check_batch(
     back: Optional[UploadFile] = File(None),
 ):
     start_time = time.time()
+    
+    if not all([full_body, front, left, right, back]):
+        missing = [k for k, v in {"full_body": full_body, "front": front, "left": left, "right": right, "back": back}.items() if v is None]
+        raise HTTPException(status_code=400, detail=f"All 5 photos are required. Missing: {', '.join(missing)}")
+        
     pool = get_pool()
     loop = asyncio.get_running_loop()
     
@@ -118,30 +123,34 @@ async def check_batch(
     overall_passed = True
     valid_images_for_identity = {}
     
+    # We will need the raw bytes for the identity check worker
+    pos_bytes = {}
+    for pos, file in files.items():
+        if file is not None:
+            try:
+                file.file.seek(0)
+                pos_bytes[pos] = (await file.read(), file.content_type)
+            except Exception as e:
+                logger.error(f"Failed to read bytes for {pos} identity check: {e}")
+
     for pos in ALLOWED_POSITIONS:
         res = results.get(pos)
         if isinstance(res, VerificationResult):
             if not res.passed:
                 overall_passed = False
-            else:
-                # We need the numpy array of the image. Wait, the result doesn't return the numpy array to save memory.
-                # I should decode it again here, or wait, it's just bytes. I can use image_io.
-                from app.utils.image_io import validate_and_decode_image
-                file = files[pos]
-                if file is not None:
-                    try:
-                        file.file.seek(0)
-                        img_bytes = await file.read()
-                        valid_images_for_identity[pos] = validate_and_decode_image(img_bytes, file.content_type)
-                    except Exception as e:
-                        logger.error(f"Failed to re-decode {pos} for identity check: {e}")
+            
+            # As long as there is a valid person/face, we want to run the identity check
+            # even if they failed background clutter or expression.
+            if "person_and_face" in res.checks and res.checks["person_and_face"].passed:
+                if pos in pos_bytes:
+                    valid_images_for_identity[pos] = pos_bytes[pos]
         else:
             # Missing or error -> overall fails
             overall_passed = False
 
     identity_consistency = None
-    # Only check identity if we have multiple valid images
-    if overall_passed and len(valid_images_for_identity) > 1:
+    # Only check identity if we have multiple valid images (faces detected)
+    if len(valid_images_for_identity) > 1:
         try:
             # Identity check can be run in executor as well
             identity_result = await loop.run_in_executor(
@@ -156,12 +165,12 @@ async def check_batch(
         except Exception as e:
             logger.exception("identity_check_error", error=str(e))
             overall_passed = False
+            from app.schemas.responses import PrimaryReason
             identity_consistency = IdentityConsistency(
                 passed=False, 
                 face_similarity_pairs={}, 
                 clothing_consistency_score=0.0,
-                reason_code="IDENTITY_CHECK_FAILED", 
-                message="Failed to verify identity across photos."
+                failed_reasons=[PrimaryReason(code="IDENTITY_CHECK_FAILED", message="Failed to verify identity across photos.")]
             )
 
     processed_in_ms = int((time.time() - start_time) * 1000)
