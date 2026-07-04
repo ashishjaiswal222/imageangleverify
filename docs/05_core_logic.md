@@ -2,55 +2,27 @@
 
 The API implements several specific algorithms to determine photo validity. All parameters are configurable in `app/verification/constants.py`.
 
-## 1. Blur Detection
-Uses **Laplacian Variance**. The Laplacian operator measures the 2nd derivative of the image, essentially highlighting regions of rapid intensity change (edges). If an image is blurry, it has fewer sharp edges, resulting in a low variance.
-- **Logic**: Convert image to grayscale -> Apply Laplacian filter -> Calculate variance.
-- **Threshold**: Fails if variance < `45.0`.
+## The 13 Individual Photo Quality Checks
 
-## 2. Lighting Detection
-Measures the overall brightness of the image to ensure it is not too dark or washed out by a flash.
-- **Logic**: Convert image to HSV color space -> Extract the V (Value/Brightness) channel -> Calculate the mean.
-- **Threshold**: Fails if mean < `40.0` (Too Dark) or > `230.0` (Too Bright).
+Every individual photo uploaded to the API undergoes a rigorous gauntlet of 13 parallel checks to ensure it is perfect for AI generation:
 
-## 3. Background Clutter Detection (AI Reference Quality)
-Ensures the background is plain and uncluttered, which is essential for AI Image Generators to focus on the subject.
-- **Logic**: Uses the `MediaPipe ImageSegmenter` to isolate the person and create a background mask. The Canny edge detection algorithm is applied strictly to the background region to measure "edge density" (busyness).
-- **Threshold**: Fails if background edge density > `3.0%`.
+1. **Face & Person Detection**: Fails if no face is found, or if multiple faces/group photos are detected. Uses InsightFace and MediaPipe.
+2. **Explicit Content**: Scans for NSFW/nudity. Fails if any blocked classes (e.g. exposed genitalia) are detected with high confidence using NudeNet.
+3. **Angle & Pitch Match**: Measures 3D Yaw and Pitch to guarantee the user is looking in the correct direction. Includes a tolerance window (±15° yaw for front, ±20° pitch) to allow natural eye-level capture without failing casual selfies.
+4. **Blur (Laplacian Variance)**: Fails if the photo is low-resolution or out of focus.
+5. **Lighting**: Checks overall brightness. Fails if the image is too dark (e.g., night indoors) or blown out by flash/backlighting.
+6. **Uneven Lighting**: Fails if there are harsh shadows on one side of the face (e.g., standing near a single bright window). 
+7. **Face Centering**: Fails if the person is standing way off to the edge of the frame.
+8. **Eyewear**: Fails if the eyes are covered by dark sunglasses (clear prescription glasses are permitted as they don't block Iris visibility).
+9. **Eyes Open**: Fails if the user is blinking or asleep, using Eye Aspect Ratio (EAR).
+10. **Occlusion / Face Covered**: Fails if hands, phones, or clothing are heavily blocking the face or hairline.
+11. **Neutral Expression**: Fails if winking, shouting, or exaggerated laughing. This check is relaxed to allow soft, natural smiles.
+12. **Background Clutter**: Uses Image Segmentation to fail if the background is a messy room, street, or pattern. (Edge density > 3%).
+13. **Heavy Editing**: Fails if a Snapchat filter, skin-smoothing beautifier, or AI-art filter was used, by measuring the structural norm of the biometric face embedding.
 
-## 4. Head Angle Verification (Yaw & Pitch)
-Uses 3D Transformation matrices to determine exactly where the user is looking and the camera's relative height.
-- **Logic**: MediaPipe extracts a 3x3 rotation matrix for the head. This is converted into Euler angles (Pitch, Yaw, Roll). 
-- **Mapping (Yaw)**: 
-  - `Front`: absolute Yaw <= 15 degrees.
-  - `Right`: Yaw > 25 degrees.
-  - `Left`: Yaw < -25 degrees.
-- **Eye-Level Constraint (Pitch)**: Fails if absolute Pitch > `20.0` degrees (to prevent high/low-angle perspective distortion).
-- **Fallback**: If the face is too small for the Face Mesh to detect landmarks (e.g., a full-body side profile or front profile), the system uses the full-body **Pose Landmarker** as a fallback. It mathematically calculates the ratio of shoulder width vs torso height, and the visibility difference between the left and right ear to prove the rotation. 
-  - *Crucial Security Rule*: Even if the AI uses the full-body fallback to calculate the angle, the initial **Face Detector** MUST still detect at least 1 face in the image to pass. If the person's face is completely hidden or off-camera, the image will be rejected with `NO_FACE_DETECTED`.
+## The 2 Batch Identity Checks
 
-## 5. Eyes Closed / Blinking
-Uses the **Eye Aspect Ratio (EAR)**.
-- **Logic**: Calculates the vertical distance between the upper and lower eyelids, divided by the horizontal distance between the eye corners. 
-- **Threshold**: If EAR < `0.20`, the eyes are considered closed.
+When submitting the final batch of 5 photos (`/check-batch`), the system guarantees identity consistency:
 
-## 6. Neutral Expression Check
-Ensures the face is relaxed and not distorted by exaggerated expressions, vital for identity-preserving AI generators.
-- **Logic**: Uses `MediaPipe FaceLandmarker` blendshapes (`jawOpen`, `mouthSmileLeft`, `mouthSmileRight`, `eyeBlinkLeft/Right`) to measure facial muscle activation.
-- **Threshold**: Fails if `jawOpen` > `0.3`, `mouthSmile` > `0.5`, or asymmetrical blinking > `0.4`.
-
-## 7. Sunglasses & Heavy Occlusion Detection
-- **Logic (Primary)**: Checks the eye region for dark contrast (`< 40` intensity) compared to the skin.
-- **Logic (Fallback)**: If the face is so heavily obscured by phones, hands, or sunglasses that landmarks completely fail, the system falls back to the `ImageSegmenter`. It analyzes the `InsightFace` bounding box to calculate the ratio of Class 5 (Accessories), Class 4 (Clothes), and Class 2 (Body/Hands) covering the face.
-- **Threshold**: Fails if Accessories > `10%` (Eyewear detected) or total occlusion > `20%` (Face Partially Covered).
-
-## 8. Back View Fallback
-Since a person facing completely backward has no visible face landmarks, the API relies on body segmentation.
-- **Logic**: Uses the Pose Landmarker to verify shoulders are visible. If pose fails, it uses the Image Segmenter to verify that at least 5% of the image contains "Hair".
-
-## 9. Cross-Photo Identity Verification
-Uses **Cosine Distance**.
-- **Logic**: InsightFace extracts a `1x128` vector representing the unique biometric structure of the face. For the batch endpoint, the API calculates the cosine distance between the `front` vector and the `left`/`right`/`full_body` vectors.
-- **Threshold**: If the mathematical distance is > `0.60`, it is a different person.
-
-## 10. Explicit Content Filter (NSFW)
-- **Logic**: NudeNet scans the image. If any of the strictly blocked classes (`FEMALE_GENITALIA_EXPOSED`, `BUTTOCKS_EXPOSED`, etc.) are detected with high confidence, the image is immediately rejected.
+14. **Cross-Photo Facial Similarity**: Extracts 128-dimensional biometric vectors from the Front, Left, Right, and Full Body photos. It mathematically compares them against each other (Cosine distance < 0.60) to guarantee it is the exact same human being in all photos.
+15. **Clothing Consistency**: Scans the clothing colors/patterns of the Front photo and compares it to the Back photo to ensure the user didn't swap outfits or use a stock photo of a back profile.
