@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 
 class CheckResult(BaseModel):
     passed: bool
@@ -13,12 +13,13 @@ class PrimaryReason(BaseModel):
     message: str
 
 class VerificationResult(BaseModel):
-    position: str
-    passed: bool
-    confidence: Optional[float] = None
-    primary_reason: Optional[PrimaryReason] = None
-    checks: Dict[str, CheckResult]
-    processed_in_ms: int = 0
+    position: str = Field(description="The position evaluated (e.g., 'front', 'full_body')")
+    passed: bool = Field(description="Whether the image passed all verification checks")
+    confidence: Optional[float] = Field(None, description="Overall confidence score (0-100) or raw metric")
+    primary_reason: Optional[PrimaryReason] = Field(None, description="The primary reason for failure, if any")
+    failed_reasons: List[PrimaryReason] = Field(default_factory=list, description="A complete list of all reasons the image failed")
+    checks: Dict[str, CheckResult] = Field(description="Detailed results of all executed checks")
+    processed_in_ms: int = Field(0, description="Time taken to process this image")
 
 class IdentityConsistency(BaseModel):
     passed: bool

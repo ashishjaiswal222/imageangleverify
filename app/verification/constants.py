@@ -15,6 +15,9 @@ YAW_FRONT_MAX = 15.0
 YAW_TURN_MIN = 25.0
 YAW_TURN_MAX = 90.0
 
+# Pitch threshold (degrees)
+PITCH_MAX = 20.0
+
 # --- Blur Detection ---
 LAPLACIAN_VAR_THRESHOLD = 10.0 # Extremely permissive to allow smooth AI images to pass, while catching heavy camera blur
 

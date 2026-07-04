@@ -89,6 +89,52 @@ def _get_robust_landmarks(image_np: np.ndarray, mp_image: mp.Image):
         
     return translated_landmarks
 
+def _get_insightface_bbox(image_np: np.ndarray):
+    models = get_models()
+    bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+    faces = models.face_analysis.get(bgr)
+    if not faces:
+        return None
+    faces.sort(key=lambda x: (x.bbox[2]-x.bbox[0])*(x.bbox[3]-x.bbox[1]), reverse=True)
+    return faces[0].bbox
+
+def check_neutral_expression(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Optional[float], Optional[str], Optional[str]]:
+    """
+    Ensures the user has a neutral expression (no big smiles, open mouths, or winking).
+    Uses MediaPipe FaceLandmarker blendshapes.
+    """
+    models = get_models()
+    result = models.face_landmarker.detect(image)
+    
+    if not result.face_blendshapes:
+        return True, None, None, None
+        
+    blendshapes = result.face_blendshapes[0]
+    # Convert blendshapes to a dictionary for easy access
+    bs_dict = {category.category_name: category.score for category in blendshapes}
+    
+    jaw_open = bs_dict.get('jawOpen', 0.0)
+    smile_left = bs_dict.get('mouthSmileLeft', 0.0)
+    smile_right = bs_dict.get('mouthSmileRight', 0.0)
+    
+    # 1. Check for yawning/shouting (Mouth wide open)
+    if jaw_open > 0.3:
+        return False, float(jaw_open), ReasonCode.EXPRESSION_NOT_NEUTRAL, "Mouth is open. Please keep a neutral expression with your mouth closed."
+        
+    # 2. Check for big smiles
+    if smile_left > 0.5 or smile_right > 0.5:
+        smile_score = max(smile_left, smile_right)
+        return False, float(smile_score), ReasonCode.EXPRESSION_NOT_NEUTRAL, "Exaggerated smile detected. Please keep a neutral expression."
+        
+    # 3. Check for winking / asymmetrical blink
+    blink_left = bs_dict.get('eyeBlinkLeft', 0.0)
+    blink_right = bs_dict.get('eyeBlinkRight', 0.0)
+    
+    if abs(blink_left - blink_right) > 0.4:
+        return False, float(abs(blink_left - blink_right)), ReasonCode.EXPRESSION_NOT_NEUTRAL, "Winking or asymmetrical eyes detected. Please keep both eyes open evenly."
+        
+    return True, 0.0, None, None
+
 def check_eyes_open(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Optional[float], Optional[str], Optional[str]]:
     """Uses Eye Aspect Ratio (EAR) to determine if eyes are open."""
     landmarks = _get_robust_landmarks(image_np, image)
@@ -113,6 +159,22 @@ def check_eyewear(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Optional
     For simplicity and speed, we will use a contrast heuristic on the eye bounding box.
     """
     lms = _get_robust_landmarks(image_np, image)
+    h, w, _ = image_np.shape
+    
+    # --- Segmenter Check (Always Run) ---
+    models = get_models()
+    bbox = _get_insightface_bbox(image_np)
+    if bbox is not None:
+        x1, y1, x2, y2 = map(int, bbox)
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        seg = models.image_segmenter.segment(image)
+        if seg and seg.category_mask:
+            mask = seg.category_mask.numpy_view()[y1:y2, x1:x2]
+            if mask.size > 0:
+                acc_ratio = np.sum(mask == 5) / mask.size
+                if acc_ratio > 0.10: # >10% of face is accessories (glasses/phone)
+                    return False, float(acc_ratio), ReasonCode.EYEWEAR_DETECTED, "Please remove sunglasses, glasses, or objects blocking your face."
     
     if not lms:
         return True, None, None, None
@@ -178,8 +240,31 @@ def check_face_coverage(image: mp.Image, image_np: np.ndarray) -> Tuple[bool, Op
     models = get_models()
     seg_result = models.image_segmenter.segment(image)
     lms = _get_robust_landmarks(image_np, image)
+    h, w, _ = image_np.shape
     
-    if not seg_result.category_mask or not lms:
+    if not seg_result.category_mask:
+        return True, None, None, None
+        
+    mask = seg_result.category_mask.numpy_view()
+        
+    # --- Universal Occlusion Check (Always Run) ---
+    bbox = _get_insightface_bbox(image_np)
+    if bbox is not None:
+        x1, y1, x2, y2 = map(int, bbox)
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        face_mask = mask[y1:y2, x1:x2]
+        
+        if face_mask.size > 0:
+            # Class 4 (clothes), 5 (accessories), 2 (body skin/hands blocking face)
+            occlusion_pixels = np.sum(face_mask == 4) + np.sum(face_mask == 5) + np.sum(face_mask == 2)
+            occlusion_ratio = occlusion_pixels / face_mask.size
+            # Require a higher threshold so it doesn't trigger just for wearing glasses (handled by check_eyewear)
+            # or having hands near chin. But holding a phone will trigger this.
+            if occlusion_ratio > 0.20:
+                return False, float(occlusion_ratio), ReasonCode.FACE_PARTIALLY_COVERED, "Face partially covered by objects, hands, or phones. Please ensure your full face is visible."
+
+    if not lms:
         return True, None, None, None
         
     mask = seg_result.category_mask.numpy_view()

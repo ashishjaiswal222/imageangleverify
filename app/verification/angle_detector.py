@@ -4,7 +4,7 @@ import math
 from typing import Tuple, Optional
 from app.verification.models_loader import get_models
 from app.utils.errors import ReasonCode
-from app.verification.constants import YAW_FRONT_MAX, YAW_TURN_MIN, YAW_TURN_MAX
+from app.verification.constants import YAW_FRONT_MAX, YAW_TURN_MIN, YAW_TURN_MAX, PITCH_MAX
 
 def get_euler_angles(R: np.ndarray) -> Tuple[float, float, float]:
     """
@@ -56,6 +56,11 @@ def check_head_pose(image: mp.Image, expected_position: str) -> Tuple[bool, Opti
     # yaw > YAW_TURN_MIN -> 'left'
     # yaw < -YAW_TURN_MIN -> 'right'
     
+    # 1. Pitch Check (Eye-level camera)
+    if abs(pitch) > PITCH_MAX:
+        message = "Camera is not at eye level. Please hold the camera directly in front of your face, not from above or below."
+        return False, float(pitch), ReasonCode.ANGLE_MISMATCH, message, "unknown", expected_position
+        
     detected_angle = "unknown"
     if abs(yaw) <= YAW_FRONT_MAX:
         detected_angle = "front"
