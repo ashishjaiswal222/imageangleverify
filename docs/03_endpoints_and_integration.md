@@ -23,6 +23,7 @@ Use this endpoint the moment a user drops a single photo into an upload box on t
   "passed": true,
   "confidence": 74.3,
   "primary_reason": null,
+  "failed_reasons": [],
   "checks": { ... }
 }
 ```
@@ -36,6 +37,12 @@ Use this endpoint the moment a user drops a single photo into an upload box on t
     "code": "IMAGE_BLURRY",
     "message": "Photo appears blurry or low resolution."
   },
+  "failed_reasons": [
+    {
+      "code": "IMAGE_BLURRY",
+      "message": "Photo appears blurry or low resolution."
+    }
+  ],
   "checks": { ... }
 }
 ```
